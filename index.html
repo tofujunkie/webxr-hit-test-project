@@ -30,13 +30,11 @@
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
       import {vec3} from './js/render/math/gl-matrix.js';
 
-      // XR globals.
       let xrButton = null;
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
 
-      // WebGL scene globals.
       let gl = null;
       let renderer = null;
       let scene = new Scene();
@@ -54,7 +52,7 @@
       scene.addNode(reticle);
       let reticleHitTestResult = null;
 
-      // Audio scene globals
+      // Audio setup
       const audioContext = new AudioContext();
       const resonance = new ResonanceAudio(audioContext);
       resonance.output.connect(audioContext.destination);
@@ -67,24 +65,30 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
-      // Create and start a looping bufferSource at `position`, return the source so we can stop it later.
+      // Ensure resume on interaction
+      window.addEventListener('click', () => {
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+      });
+
       function createAudioSource(position) {
-        if (audioContext.state === 'suspended') audioContext.resume();
         const source3d = resonance.createSource();
         source3d.setPosition(position[0], position[1], position[2]);
 
         const bufferSource = audioContext.createBufferSource();
         bufferSource.buffer = audioBuffer;
-        bufferSource.loop = true;              // <-- loop continuously
+        bufferSource.loop = true;
         bufferSource.connect(source3d.input);
         bufferSource.start();
-        // return bufferSource;
-        return {bufferSource, source3d}
+
+        return { bufferSource, source3d };
       }
 
       function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {requiredFeatures: ['local', 'hit-test', 'anchors']})
-                           .then(onSessionStarted);
+        return navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local', 'hit-test', 'anchors']
+        }).then(onSessionStarted);
       }
 
       function onSessionStarted(session) {
@@ -113,7 +117,6 @@
       }
 
       function onEndSession(session) {
-        // stop *all* audio on end
         anchoredObjects.forEach(o => o.audioSource.stop());
         anchoredObjects.length = 0;
         xrHitTestSource.cancel();
@@ -130,14 +133,17 @@
         let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
         scene.addNode(stereo);
 
-        // start looping audio and keep its source
-        const audioSource = createAudioSource(position);
+        const { bufferSource, source3d } = createAudioSource(position);
 
-        anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource, source3d });
+        anchoredObjects.push({
+          anchoredObject: stereo,
+          anchor,
+          audioSource: bufferSource,
+          source3d
+        });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           const old = anchoredObjects.shift();
-          // stop that stereo’s audio before removing
           old.audioSource.stop();
           scene.removeNode(old.anchoredObject);
           old.anchor.delete();
@@ -149,7 +155,7 @@
         const pose = reticleHitTestResult.getPose(xrRefSpace).transform.position;
         reticleHitTestResult.createAnchor().then(anchor => {
           addAnchoredObjectsToScene(anchor, [pose.x, pose.y, pose.z]);
-        }, err => console.error("Could not create anchor:", err));
+        }).catch(err => console.error("Could not create anchor:", err));
       }
 
       function onXRFrame(t, frame) {
@@ -167,7 +173,7 @@
           }
         }
 
-        for (let {anchoredObject, anchor} of anchoredObjects) {
+        for (let {anchoredObject, anchor, source3d} of anchoredObjects) {
           if (!frame.trackedAnchors.has(anchor)) continue;
           const ap = frame.getPose(anchor.anchorSpace, xrRefSpace);
           anchoredObject.matrix = ap.transform.matrix;
@@ -177,7 +183,7 @@
             ap.transform.matrix[13],
             ap.transform.matrix[14],
           ];
-          source3d.setPosition(pos[0], pos[1], pos[2]); // <-- update audio position
+          source3d.setPosition(pos[0], pos[1], pos[2]);
         }
 
         scene.startFrame();
@@ -198,9 +204,9 @@
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
-                      .then((supported) => {
-            xrButton.enabled = supported;
-          });
+            .then((supported) => {
+              xrButton.enabled = supported;
+            });
         }
       }
 
