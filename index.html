@@ -22,6 +22,7 @@
       </details>
     </header>
     <script type="module">
+      import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
       import {Node} from './js/render/core/node.js';
@@ -30,6 +31,7 @@
       import {vec3} from './js/render/math/gl-matrix.js';
 
       // XR globals.
+      let xrButton = null;
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
