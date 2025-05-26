@@ -78,7 +78,8 @@
         bufferSource.loop = true;              // <-- loop continuously
         bufferSource.connect(source3d.input);
         bufferSource.start();
-        return bufferSource;
+        // return bufferSource;
+        return {bufferSource, source3d}
       }
 
       function onRequestSession() {
@@ -132,7 +133,7 @@
         // start looping audio and keep its source
         const audioSource = createAudioSource(position);
 
-        anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource });
+        anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource, source3d });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           const old = anchoredObjects.shift();
@@ -170,6 +171,13 @@
           if (!frame.trackedAnchors.has(anchor)) continue;
           const ap = frame.getPose(anchor.anchorSpace, xrRefSpace);
           anchoredObject.matrix = ap.transform.matrix;
+
+          const pos = [
+            ap.transform.matrix[12],
+            ap.transform.matrix[13],
+            ap.transform.matrix[14],
+          ];
+          source3d.setPosition(pos[0], pos[1], pos[2]); // <-- update audio position
         }
 
         scene.startFrame();
