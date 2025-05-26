@@ -15,18 +15,15 @@
     <header>
       <details open>
         <summary>Hit Test with Anchors</summary>
-        <p>
-          This sample demonstrates using hit testing to find intersections on real-world surfaces and then using Anchors to attach a virtual object to that location.
-          <a class="back" href="./">Back</a>
-        </p>
+        <p>This demo shows hit testing, anchors, and positional audio with scaling visuals. <a class="back" href="./">Back</a></p>
       </details>
     </header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
-      import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
       import {vec3} from './js/render/math/gl-matrix.js';
 
       let xrButton = null;
@@ -49,6 +46,21 @@
       resonance.output.connect(audioContext.destination);
       audioContext.suspend();
 
+      const ANALYSER_FFT_SIZE = 1024;
+      let fftBuffer = new Float32Array(ANALYSER_FFT_SIZE);
+
+      function getLoudnessScale(analyser) {
+        analyser.getFloatTimeDomainData(fftBuffer);
+        let sum = 0;
+        for (let i = 0; i < fftBuffer.length; ++i)
+          sum += fftBuffer[i] * fftBuffer[i];
+        let rms = Math.sqrt(sum / fftBuffer.length);
+        let db = 30 + 10 / Math.LN10 * Math.log(rms <= 0 ? 0.0001 : rms);
+        analyser.lastRMSdB ??= 0;
+        analyser.lastRMSdB += 0.525 * ((db < 0 ? 0 : db) - analyser.lastRMSdB);
+        return Math.max(0.3, analyser.lastRMSdB / 30.0);
+      }
+
       let audioBuffer = null;
       fetch('media/sound/beep.mp3')
         .then(r => r.arrayBuffer())
@@ -56,102 +68,30 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
-      const MAX_ANCHORED_OBJECTS = 10;
-      let anchoredObjects = [];
-
       function createAudioSource(position) {
         if (audioContext.state === 'suspended') audioContext.resume();
+
         const source3d = resonance.createSource();
-        source3d.setPosition(position[0], position[1], position[2]);
+        source3d.setPosition(...position);
 
         const bufferSource = audioContext.createBufferSource();
         bufferSource.buffer = audioBuffer;
         bufferSource.loop = true;
-        bufferSource.connect(source3d.input);
+
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = ANALYSER_FFT_SIZE;
+
+        bufferSource.connect(analyser);
+        analyser.connect(source3d.input);
+
         bufferSource.start();
 
-        return {bufferSource, source3d};
-      }
-
-      function addAnchoredObjectsToScene(anchor, position) {
-        const stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
-        stereo.visible = true;
-
-        let shadow = new DropShadowNode();
-        vec3.set(shadow.scale, 0.15, 0.15, 0.15);
-        stereo.addNode(shadow);
-
-        scene.addNode(stereo);
-
-        const audioSource = createAudioSource(position);
-
-        anchor.context = { sceneObject: stereo, audioSource };
-        anchoredObjects.push(anchor);
-
-        if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
-          const old = anchoredObjects.shift();
-          old.context.audioSource.bufferSource.stop();
-          scene.removeNode(old.context.sceneObject);
-          old.delete();
-        }
-      }
-
-      function onSelect() {
-        if (!reticle.visible) return;
-        const pose = reticleHitTestResult.getPose(xrRefSpace).transform.position;
-        reticleHitTestResult.createAnchor().then(anchor => {
-          addAnchoredObjectsToScene(anchor, [pose.x, pose.y, pose.z]);
-        }, err => console.error("Could not create anchor:", err));
-      }
-
-      function onXRFrame(t, frame) {
-        const session = frame.session;
-        const viewerPose = frame.getViewerPose(xrRefSpace);
-
-        reticle.visible = false;
-        if (xrHitTestSource && viewerPose) {
-          const hits = frame.getHitTestResults(xrHitTestSource);
-          if (hits.length > 0) {
-            const hitPose = hits[0].getPose(xrRefSpace);
-            reticle.visible = true;
-            reticle.matrix = hitPose.transform.matrix;
-            reticleHitTestResult = hits[0];
-          }
-        }
-
-        if (viewerPose) {
-          resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
-        }
-
-        for (const anchor of frame.trackedAnchors) {
-          const pose = frame.getPose(anchor.anchorSpace, xrRefSpace);
-          if (!pose || !anchor.context) continue;
-
-          const object = anchor.context.sceneObject;
-          const pos = [
-            pose.transform.matrix[12],
-            pose.transform.matrix[13],
-            pose.transform.matrix[14],
-          ];
-
-          object.matrix = pose.transform.matrix;
-          object.visible = true;
-
-          if (anchor.context.audioSource) {
-            anchor.context.audioSource.source3d.setPosition(pos[0], pos[1], pos[2]);
-          }
-        }
-
-        scene.startFrame();
-        session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, viewerPose);
-        scene.endFrame();
+        return {bufferSource, source3d, analyser};
       }
 
       function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local', 'hit-test', 'anchors']
-        }).then(onSessionStarted);
+        return navigator.xr.requestSession('immersive-ar', {requiredFeatures: ['local', 'hit-test', 'anchors']})
+                           .then(onSessionStarted);
       }
 
       function onSessionStarted(session) {
@@ -166,46 +106,118 @@
 
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
-        session.requestReferenceSpace('viewer').then(refSpace => {
-          xrViewerSpace = refSpace;
-          return session.requestHitTestSource({ space: xrViewerSpace });
+        session.requestReferenceSpace('viewer').then(space => {
+          xrViewerSpace = space;
+          return session.requestHitTestSource({ space });
         }).then(hitTestSource => {
           xrHitTestSource = hitTestSource;
         });
 
-        session.requestReferenceSpace('local').then(refSpace => {
-          xrRefSpace = refSpace;
+        session.requestReferenceSpace('local').then(space => {
+          xrRefSpace = space;
           session.requestAnimationFrame(onXRFrame);
         });
       }
 
       function onEndSession(session) {
-        for (const anchor of anchoredObjects) {
-          anchor.context.audioSource.bufferSource.stop();
-          scene.removeNode(anchor.context.sceneObject);
-          anchor.delete();
-        }
+        anchoredObjects.forEach(o => o.audioSource.bufferSource.stop());
         anchoredObjects.length = 0;
-        xrHitTestSource.cancel();
+        xrHitTestSource?.cancel();
         xrHitTestSource = null;
         session.end();
       }
 
       function onSessionEnded() {}
 
+      const MAX_ANCHORED_OBJECTS = 10;
+      let anchoredObjects = [];
+
+      function addAnchoredObjectsToScene(anchor, position) {
+        let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
+        scene.addNode(stereo);
+        const audioSource = createAudioSource(position);
+
+        anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource });
+
+        if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
+          const old = anchoredObjects.shift();
+          old.audioSource.bufferSource.stop();
+          scene.removeNode(old.anchoredObject);
+          old.anchor.delete();
+        }
+      }
+
+      function onSelect() {
+        if (!reticle.visible) return;
+        const pose = reticleHitTestResult.getPose(xrRefSpace).transform.position;
+        reticleHitTestResult.createAnchor().then(anchor => {
+          addAnchoredObjectsToScene(anchor, [pose.x, pose.y, pose.z]);
+        }).catch(console.error);
+      }
+
+      function onXRFrame(t, frame) {
+        const session = frame.session;
+        const viewerPose = frame.getViewerPose(xrRefSpace);
+
+        if (viewerPose) {
+          const pos = viewerPose.transform.position;
+          const orient = viewerPose.transform.orientation;
+          resonance.setListenerPosition(pos.x, pos.y, pos.z);
+          resonance.setListenerOrientation(orient.x, orient.y, orient.z, orient.w);
+        }
+
+        reticle.visible = false;
+        if (xrHitTestSource && viewerPose) {
+          const hits = frame.getHitTestResults(xrHitTestSource);
+          if (hits.length > 0) {
+            const hitPose = hits[0].getPose(xrRefSpace);
+            reticle.visible = true;
+            reticle.matrix = hitPose.transform.matrix;
+            reticleHitTestResult = hits[0];
+          }
+        }
+
+        for (let obj of anchoredObjects) {
+          const ap = frame.getPose(obj.anchor.anchorSpace, xrRefSpace);
+          if (!ap) continue;
+
+          obj.anchoredObject.matrix = ap.transform.matrix;
+
+          const pos = [
+            ap.transform.matrix[12],
+            ap.transform.matrix[13],
+            ap.transform.matrix[14],
+          ];
+          obj.audioSource.source3d.setPosition(...pos);
+
+          const scale = getLoudnessScale(obj.audioSource.analyser);
+          const m = obj.anchoredObject.matrix;
+          m[0] *= scale; m[1] *= scale; m[2] *= scale;
+          m[4] *= scale; m[5] *= scale; m[6] *= scale;
+          m[8] *= scale; m[9] *= scale; m[10] *= scale;
+        }
+
+        scene.startFrame();
+        session.requestAnimationFrame(onXRFrame);
+        scene.drawXRFrame(frame, viewerPose);
+        scene.endFrame();
+      }
+
       function initXR() {
         xrButton = new WebXRButton({
-          onRequestSession: onRequestSession,
-          onEndSession: onEndSession,
-          textEnterXRTitle: "NTRD DEBUG",
-          textXRNotFoundTitle: "UNSUPPORTED",
-          textExitXRTitle: "EXIT",
+          onRequestSession,
+          onEndSession,
+          textEnterXRTitle: "ENTER AR",
+          textXRNotFoundTitle: "XR NOT SUPPORTED",
+          textExitXRTitle: "EXIT AR",
         });
         document.querySelector('header').appendChild(xrButton.domElement);
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
-                      .then(supported => { xrButton.enabled = supported; });
+                      .then((supported) => {
+            xrButton.enabled = supported;
+          });
         }
       }
 
