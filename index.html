@@ -13,37 +13,48 @@
   </head>
   <body>
     <header>
-      <!-- <details open>
+      <details open>
         <summary>Hit Test with Anchors</summary>
         <p>
           This sample demonstrates using hit testing to find intersections on real-world surfaces and then using Anchors to attach a virtual object to that location.
           <a class="back" href="./">Back</a>
         </p>
-      </details> -->
+      </details>
     </header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
       import {Renderer, createWebGLContext} from './js/render/core/renderer.js';
+      import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
       import {vec3} from './js/render/math/gl-matrix.js';
 
+      // XR globals.
       let xrButton = null;
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
 
+      // WebGL scene globals.
       let gl = null;
       let renderer = null;
       let scene = new Scene();
       scene.enableStats(false);
+
+      let arObject = new Node();
+      arObject.visible = false;
+      scene.addNode(arObject);
+
+      let stereoModel = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
+      arObject.addNode(stereoModel);
 
       let reticle = new Gltf2Node({url: 'media/gltf/reticle/reticle.gltf'});
       reticle.visible = false;
       scene.addNode(reticle);
       let reticleHitTestResult = null;
 
+      // Audio scene globals
       const audioContext = new AudioContext();
       const resonance = new ResonanceAudio(audioContext);
       resonance.output.connect(audioContext.destination);
@@ -56,9 +67,7 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
-      const MAX_ANCHORED_OBJECTS = 2;
-      let anchoredObjects = [];
-
+      // Create and start a looping bufferSource at `position`, return the source so we can stop it later.
       function createAudioSource(position) {
         if (audioContext.state === 'suspended') audioContext.resume();
         const source3d = resonance.createSource();
@@ -66,92 +75,15 @@
 
         const bufferSource = audioContext.createBufferSource();
         bufferSource.buffer = audioBuffer;
-        bufferSource.loop = true;
+        bufferSource.loop = true;              // <-- loop continuously
         bufferSource.connect(source3d.input);
         bufferSource.start();
-
-        return {bufferSource, source3d};
-      }
-
-      function addAnchoredObjectsToScene(anchor, position) {
-        const stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
-        stereo.visible = true;
-
-        let shadow = new DropShadowNode();
-        vec3.set(shadow.scale, 0.15, 0.15, 0.15);
-        stereo.addNode(shadow);
-
-        scene.addNode(stereo);
-
-        const audioSource = createAudioSource(position);
-
-        anchor.context = { sceneObject: stereo, audioSource };
-        anchoredObjects.push(anchor);
-
-        if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
-          const old = anchoredObjects.shift();
-          old.context.audioSource.bufferSource.stop();
-          scene.removeNode(old.context.sceneObject);
-          old.delete();
-        }
-      }
-
-      function onSelect() {
-        if (!reticle.visible) return;
-        const pose = reticleHitTestResult.getPose(xrRefSpace).transform.position;
-        reticleHitTestResult.createAnchor().then(anchor => {
-          addAnchoredObjectsToScene(anchor, [pose.x, pose.y, pose.z]);
-        }, err => console.error("Could not create anchor:", err));
-      }
-
-      function onXRFrame(t, frame) {
-        const session = frame.session;
-        const viewerPose = frame.getViewerPose(xrRefSpace);
-
-        reticle.visible = false;
-        if (xrHitTestSource && viewerPose) {
-          const hits = frame.getHitTestResults(xrHitTestSource);
-          if (hits.length > 0) {
-            const hitPose = hits[0].getPose(xrRefSpace);
-            reticle.visible = true;
-            reticle.matrix = hitPose.transform.matrix;
-            reticleHitTestResult = hits[0];
-          }
-        }
-
-        if (viewerPose) {
-          resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
-        }
-
-        for (const anchor of frame.trackedAnchors) {
-          const pose = frame.getPose(anchor.anchorSpace, xrRefSpace);
-          if (!pose || !anchor.context) continue;
-
-          const object = anchor.context.sceneObject;
-          const pos = [
-            pose.transform.matrix[12],
-            pose.transform.matrix[13],
-            pose.transform.matrix[14],
-          ];
-
-          object.matrix = pose.transform.matrix;
-          object.visible = true;
-
-          if (anchor.context.audioSource) {
-            anchor.context.audioSource.source3d.setPosition(pos[0], pos[1], pos[2]);
-          }
-        }
-
-        scene.startFrame();
-        session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, viewerPose);
-        scene.endFrame();
+        return bufferSource;
       }
 
       function onRequestSession() {
-        return navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['local', 'hit-test', 'anchors']
-        }).then(onSessionStarted);
+        return navigator.xr.requestSession('immersive-ar', {requiredFeatures: ['local', 'hit-test', 'anchors']})
+                           .then(onSessionStarted);
       }
 
       function onSessionStarted(session) {
@@ -180,11 +112,8 @@
       }
 
       function onEndSession(session) {
-        for (const anchor of anchoredObjects) {
-          anchor.context.audioSource.bufferSource.stop();
-          scene.removeNode(anchor.context.sceneObject);
-          anchor.delete();
-        }
+        // stop *all* audio on end
+        anchoredObjects.forEach(o => o.audioSource.stop());
         anchoredObjects.length = 0;
         xrHitTestSource.cancel();
         xrHitTestSource = null;
@@ -192,6 +121,62 @@
       }
 
       function onSessionEnded() {}
+
+      const MAX_ANCHORED_OBJECTS = 2;
+      let anchoredObjects = [];
+
+      function addAnchoredObjectsToScene(anchor, position) {
+        let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
+        scene.addNode(stereo);
+
+        // start looping audio and keep its source
+        const audioSource = createAudioSource(position);
+
+        anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource });
+
+        if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
+          const old = anchoredObjects.shift();
+          // stop that stereo’s audio before removing
+          old.audioSource.stop();
+          scene.removeNode(old.anchoredObject);
+          old.anchor.delete();
+        }
+      }
+
+      function onSelect() {
+        if (!reticle.visible) return;
+        const pose = reticleHitTestResult.getPose(xrRefSpace).transform.position;
+        reticleHitTestResult.createAnchor().then(anchor => {
+          addAnchoredObjectsToScene(anchor, [pose.x, pose.y, pose.z]);
+        }, err => console.error("Could not create anchor:", err));
+      }
+
+      function onXRFrame(t, frame) {
+        const session = frame.session;
+        const viewerPose = frame.getViewerPose(xrRefSpace);
+
+        reticle.visible = false;
+        if (xrHitTestSource && viewerPose) {
+          const hits = frame.getHitTestResults(xrHitTestSource);
+          if (hits.length > 0) {
+            const hitPose = hits[0].getPose(xrRefSpace);
+            reticle.visible = true;
+            reticle.matrix = hitPose.transform.matrix;
+            reticleHitTestResult = hits[0];
+          }
+        }
+
+        for (let {anchoredObject, anchor} of anchoredObjects) {
+          if (!frame.trackedAnchors.has(anchor)) continue;
+          const ap = frame.getPose(anchor.anchorSpace, xrRefSpace);
+          anchoredObject.matrix = ap.transform.matrix;
+        }
+
+        scene.startFrame();
+        session.requestAnimationFrame(onXRFrame);
+        scene.drawXRFrame(frame, viewerPose);
+        scene.endFrame();
+      }
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -205,7 +190,9 @@
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
-                      .then(supported => { xrButton.enabled = supported; });
+                      .then((supported) => {
+            xrButton.enabled = supported;
+          });
         }
       }
 
