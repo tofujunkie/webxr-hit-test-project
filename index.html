@@ -89,7 +89,7 @@
         anchoredObjects.push(anchor);
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
-          let old = anchoredObjects.shift();
+          const old = anchoredObjects.shift();
           old.audioSource.bufferSource.stop(0);
           scene.removeNode(old.context.sceneObject);
           old.delete();
