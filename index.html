@@ -89,10 +89,10 @@
         anchoredObjects.push(anchor);
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
-          const old = anchoredObjects.shift();
-          old.context.audioSource.bufferSource.stop();
-          scene.removeNode(old.context.sceneObject);
-          old.delete();
+          let old = anchoredObjects.shift();
+          old.audioSource.bufferSource.stop(0);
+          scene.removeNode(old.anchoredObjects);
+          old.anchor.delete();
         }
       }
 
