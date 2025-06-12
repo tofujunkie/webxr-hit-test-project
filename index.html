@@ -120,7 +120,9 @@
         session.end();
       }
 
-      function onSessionEnded() {}
+      function onSessionEnded() {
+        xrButton.setSession(null);
+      }
 
       const MAX_ANCHORED_OBJECTS = 2;
       let anchoredObjects = [];
@@ -135,9 +137,9 @@
         anchoredObjects.push({ anchoredObject: stereo, anchor, audioSource });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
-          const old = anchoredObjects.shift();
+          let old = anchoredObjects.shift();
           // stop that stereo’s audio before removing
-          old.audioSource.stop();
+          // old.audioSource.stop();
           scene.removeNode(old.anchoredObject);
           old.anchor.delete();
         }
