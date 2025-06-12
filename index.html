@@ -126,7 +126,7 @@
 
       const MAX_ANCHORED_OBJECTS = 2;
       let anchoredObjects = [];
-      let sourcesToStop = [];
+      // let sourcesToStop = [];
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
@@ -141,10 +141,13 @@
           let old = anchoredObjects.shift();
           // stop that stereo’s audio before removing
           // old.audioSource.stop(); //freezes the webpage
+          // Safely silence the old audio source
+          old.audioSource.disconnect();
+          old.audioSource = null; // Helps garbage collector release memory
           scene.removeNode(old.anchoredObject);
           old.anchor.delete();
           // fill array to delete anchors
-          anchorsToDelete.push(old.anchor); 
+          // anchorsToDelete.push(old.anchor); 
         }
       }
 
@@ -183,10 +186,10 @@
         scene.endFrame();
 
         // Safely stop and discard audio sources
-        for (let source of sourcesToStop) {
-          try { source.stop(0); } catch (e) { console.warn(e); }
-        }
-        sourcesToStop = [];
+        // for (let source of sourcesToStop) {
+        //   try { source.stop(0); } catch (e) { console.warn(e); }
+        // }
+        // sourcesToStop = [];
       }
 
       function initXR() {
