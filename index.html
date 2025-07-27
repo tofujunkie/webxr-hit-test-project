@@ -282,9 +282,9 @@
 
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
+          updateAudioNodes(frame, viewerPose);
         }
-
-        updateAudioNodes(frame, viewerPose);
+      
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
