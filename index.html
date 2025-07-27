@@ -21,6 +21,7 @@
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
+      import {LineNode} from './js/render/nodes/line.js';
       import {mat4, vec3} from './js/render/math/gl-matrix.js';
 
       // XR globals
@@ -76,6 +77,31 @@
         analyser.lastRMSdB += 0.525 * ((db < 0 ? 0 : db) - analyser.lastRMSdB);
 
         return Math.max(0.3, analyser.lastRMSdB / 30.0);
+      }
+
+      function updateLines() {
+        // Remove old lines from scene
+        for (let line of lineNodes) {
+          scene.removeNode(line);
+        }
+        lineNodes = [];
+
+        if (anchoredObjects.length < 2) return;
+
+        for (let i = 0; i < anchoredObjects.length - 1; i++) {
+          const startAnchor = anchoredObjects[i].anchor;
+          const endAnchor = anchoredObjects[i + 1].anchor;
+
+          const startPose = startAnchor.anchorSpace ? startAnchor.anchorSpace : null;
+          const endPose = endAnchor.anchorSpace ? endAnchor.anchorSpace : null;
+
+          if (startPose && endPose) {
+            // Temporarily use zero, will be updated in onXRFrame
+            let line = new LineNode([0, 0, 0], [0, 0, 0]);
+            scene.addNode(line);
+            lineNodes.push({ lineNode: line, startAnchor, endAnchor });
+          }
+        }
       }
 
       function updateAudioNodes(frame, viewerPose) {
@@ -241,6 +267,7 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
+      let lineNodes = [];
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
@@ -307,7 +334,20 @@
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
+          updateLines();
         }
+
+        for (let line of lineNodes) {
+          const startPose = frame.getPose(line.startAnchor.anchorSpace, xrRefSpace);
+          const endPose = frame.getPose(line.endAnchor.anchorSpace, xrRefSpace);
+
+          if (startPose && endPose) {
+            const s = startPose.transform.position;
+            const e = endPose.transform.position;
+            line.lineNode.setPoints([s.x, s.y, s.z], [e.x, e.y, e.z]);
+          }
+        }
+
       
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
