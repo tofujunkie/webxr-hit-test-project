@@ -135,7 +135,7 @@
         anchoredObjects.forEach(obj => {
           if (obj.audioSource) {
             try {
-              obj.audioSource.stop();
+              obj.audioSource.stop(0);
               obj.audioSource.disconnect();
             } catch (e) {
               console.warn('Audio already stopped:', e);
