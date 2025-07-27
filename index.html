@@ -286,7 +286,7 @@
             const sphere = new Gltf2Node({ url: SPHERE_MODEL_URL });
             const m = mat4.create();
             mat4.fromTranslation(m, [x, y, z]);
-            mat4.scale(m, m, [0.02, 0.02, 0.02]); // Make spheres small
+            mat4.scale(m, m, [0.5, 0.5, 0.5]); // Make spheres small
             sphere.matrix = m;
 
             scene.addNode(sphere);
