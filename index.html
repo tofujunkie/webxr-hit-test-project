@@ -81,6 +81,8 @@
       function updateAudioNodes(frame, pose) {
         const THRESHOLD = 0.2; // 20 cm close to camera
 
+        const viewerPose = pose.transform.position;
+
         for (let obj of anchoredObjects) {
           const { anchoredObject, anchor, analyser, source3d } = obj;
 
@@ -97,9 +99,9 @@
           source3d.setPosition(p.x, p.y, p.z);
 
           // Calculate distance to viewer
-          const dx = p.x - pose.x;
-          const dy = p.y - pose.y;
-          const dz = p.z - pose.z;
+          const dx = p.x - viewerPose.x;
+          const dy = p.y - viewerPose.y;
+          const dz = p.z - viewerPose.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
           if (distance < THRESHOLD) {
