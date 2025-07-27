@@ -241,6 +241,53 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
+      let connectionSpheres = []; // Holds arrays of spheres for each pair
+
+      function updateAnchorConnections() {
+        // Remove old spheres from scene
+        for (let chain of connectionSpheres) {
+          for (let sphereNode of chain) {
+            scene.removeNode(sphereNode);
+          }
+        }
+        connectionSpheres = [];
+
+        if (anchoredObjects.length < 2) return; // Need at least 2 anchors
+
+        for (let i = 0; i < anchoredObjects.length - 1; i++) {
+          const startObj = anchoredObjects[i].anchoredObject;
+          const endObj = anchoredObjects[i + 1].anchoredObject;
+
+          // Get positions from the anchoredObject matrices
+          let startPos = [startObj.matrix[12], startObj.matrix[13], startObj.matrix[14]];
+          let endPos = [endObj.matrix[12], endObj.matrix[13], endObj.matrix[14]];
+
+          // Number of spheres to create between anchors
+          const numSpheres = 10; 
+          const chain = [];
+
+          for (let j = 1; j <= numSpheres; j++) {
+            const t = j / (numSpheres + 1);
+            const pos = [
+              startPos[0] + (endPos[0] - startPos[0]) * t,
+              startPos[1] + (endPos[1] - startPos[1]) * t,
+              startPos[2] + (endPos[2] - startPos[2]) * t,
+            ];
+
+            // Create sphere node and position it
+            const sphere = new Gltf2Node({ url: 'media/gltf/sphere/sphere.gltf' });
+            mat4.fromTranslation(sphere.matrix, pos);
+            const scale = 0.02; // Small spheres
+            mat4.scale(sphere.matrix, sphere.matrix, [scale, scale, scale]);
+
+            scene.addNode(sphere);
+            chain.push(sphere);
+          }
+
+          connectionSpheres.push(chain);
+        }
+      }
+
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
@@ -307,6 +354,7 @@
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
+          updateAnchorConnections();
         }
       
         scene.startFrame();
