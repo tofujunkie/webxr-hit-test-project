@@ -54,10 +54,20 @@
       // Helper func to play nav confirmation audio
       function playConfirmationSound() {
         if (!confirmAudioBuffer) return; // Not loaded yet
-        const source = audioContext.createBufferSource();
-        source.buffer = confirmAudioBuffer;
-        source.connect(audioContext.destination);
-        source.start();
+
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().then(() => {
+            const source = audioContext.createBufferSource();
+            source.buffer = confirmAudioBuffer;
+            source.connect(audioContext.destination);
+            source.start();
+          });
+        } else {
+          const source = audioContext.createBufferSource();
+          source.buffer = confirmAudioBuffer;
+          source.connect(audioContext.destination);
+          source.start();
+        }
       }
 
       function clearScene() {
