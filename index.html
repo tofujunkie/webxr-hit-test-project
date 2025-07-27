@@ -79,6 +79,8 @@
       }
 
       function updateAudioNodes(frame) {
+        const THRESHOLD = 0.2; // 20 cm close to camera
+        
         for (let obj of anchoredObjects) {
           const { anchoredObject, anchor, analyser, source3d } = obj;
 
@@ -93,6 +95,20 @@
           // Update audio source position
           const p = anchorPose.transform.position;
           source3d.setPosition(p.x, p.y, p.z);
+
+          // Calculate distance to viewer
+          const dx = p.x - viewerPos.x;
+          const dy = p.y - viewerPos.y;
+          const dz = p.z - viewerPos.z;
+          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+          if (distance < THRESHOLD) {
+            anchoredObject.visible = false;
+            source3d.gain = 0;
+          } else {
+            anchoredObject.visible = true;
+            source3d.gain = 1;
+          }
 
           // Apply loudness-based scale on top
           const scale = getLoudnessScale(analyser);
