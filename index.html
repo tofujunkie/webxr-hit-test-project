@@ -284,8 +284,6 @@
           source3d: source3d
         });
 
-        updateLines();
-
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           let objectToRemove = anchoredObjects.shift();
           scene.removeNode(objectToRemove.anchoredObject);
@@ -300,6 +298,8 @@
             }
           }
         }
+
+        updateLines();
       }
 
       function onSelect(event) {
