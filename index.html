@@ -121,9 +121,9 @@
           // Sound logic: only first stereo plays
           if (anchor === firstActiveAnchor) {
             const dx = p.x - viewerPos.x;
-            const dy = p.y - viewerPos.y;
+            // const dy = p.y - viewerPos.y; // test without y axis
             // const dz = p.z - viewerPos.z; // Do not use the Z axis, my back hurts from squatting
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            const distance = Math.sqrt(dx * dx);
 
             if (distance < THRESHOLD) {
               // Remove only the first anchor if too close
