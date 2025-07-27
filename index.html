@@ -78,10 +78,9 @@
         return Math.max(0.3, analyser.lastRMSdB / 30.0);
       }
 
-      function updateAudioNodes(frame, pose) {
-        const THRESHOLD = 0.2; // 20 cm close to camera
-
-        const viewerPose = pose.transform.position;
+      function updateAudioNodes(frame, viewerPose) {
+        const THRESHOLD = 0.2;
+        const viewerPos = viewerPose.transform.position;
 
         for (let obj of anchoredObjects) {
           const { anchoredObject, anchor, analyser, source3d } = obj;
@@ -91,28 +90,25 @@
           const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
           if (!anchorPose) continue;
 
-          // Apply anchor transform first
           anchoredObject.matrix.set(anchorPose.transform.matrix);
 
-          // Update audio source position
           const p = anchorPose.transform.position;
           source3d.setPosition(p.x, p.y, p.z);
 
-          // Calculate distance to viewer
-          const dx = p.x - viewerPose.x;
-          const dy = p.y - viewerPose.y;
-          const dz = p.z - viewerPose.z;
+          const dx = p.x - viewerPos.x;
+          const dy = p.y - viewerPos.y;
+          const dz = p.z - viewerPos.z;
           const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
           if (distance < THRESHOLD) {
             anchoredObject.visible = false;
             source3d.setGain(0);
+            continue; // ✅ Don't scale hidden objects
           } else {
             anchoredObject.visible = true;
             source3d.setGain(1);
           }
 
-          // Apply loudness-based scale on top
           const scale = getLoudnessScale(analyser);
           mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
         }
@@ -270,11 +266,11 @@
 
       function onXRFrame(t, frame) {
         let session = frame.session;
-        let pose = frame.getViewerPose(xrRefSpace);
+        let viewerPose = frame.getViewerPose(xrRefSpace);
 
         reticle.visible = false;
 
-        if (xrHitTestSource && pose) {
+        if (xrHitTestSource && viewerPose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
             let pose = hitTestResults[0].getPose(xrRefSpace);
@@ -284,15 +280,15 @@
           }
         }
 
-        if (pose) {
-          resonance.setListenerFromMatrix({elements: pose.transform.matrix});
+        if (viewerPose) {
+          resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
         }
 
-        updateAudioNodes(frame, pose);
+        updateAudioNodes(frame, viewerPose);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
-        scene.drawXRFrame(frame, pose);
+        scene.drawXRFrame(frame, viewerPose);
         scene.endFrame();
       }
 
