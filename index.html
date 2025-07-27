@@ -277,7 +277,7 @@
             // Create sphere node and position it
             const sphere = new Gltf2Node({ url: 'media/gltf/sphere/sphere.gltf' });
             mat4.fromTranslation(sphere.matrix, pos);
-            const scale = 0.02; // Small spheres
+            const scale = 0.1; // Small spheres
             mat4.scale(sphere.matrix, sphere.matrix, [scale, scale, scale]);
 
             scene.addNode(sphere);
