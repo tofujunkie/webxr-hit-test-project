@@ -146,6 +146,7 @@
               }
 
               anchoredObjects = anchoredObjects.filter(o => o.anchor !== anchor);
+              updateLines();
 
               // Exit after removal so we don't modify while iterating
               return;
@@ -283,6 +284,8 @@
           source3d: source3d
         });
 
+        updateLines();
+
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           let objectToRemove = anchoredObjects.shift();
           scene.removeNode(objectToRemove.anchoredObject);
@@ -334,7 +337,6 @@
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
-          updateLines();
         }
 
         for (let line of lineNodes) {
@@ -347,7 +349,6 @@
             line.lineNode.setPoints([s.x, s.y, s.z], [e.x, e.y, e.z]);
           }
         }
-
       
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
