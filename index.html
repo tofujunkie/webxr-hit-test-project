@@ -35,12 +35,30 @@
       resonance.output.connect(audioContext.destination);
       audioContext.suspend();
 
+      // Audio buffer loop for navigation points
       let audioBuffer = null;
       fetch('media/sound/beep.mp3')
         .then(r => r.arrayBuffer())
         .then(ab => audioContext.decodeAudioData(ab))
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
+
+      // Audio buffer for navigational confirmation
+      let confirmAudioBuffer = null;
+      fetch('media/sound/beep_confirmed.mp3')
+        .then(r => r.arrayBuffer())
+        .then(ab => audioContext.decodeAudioData(ab))
+        .then(decoded => { confirmAudioBuffer = decoded; })
+        .catch(console.error);
+
+      // Helper func to play nav confirmation audio
+      function playConfirmationSound() {
+        if (!confirmAudioBuffer) return; // Not loaded yet
+        const source = audioContext.createBufferSource();
+        source.buffer = confirmAudioBuffer;
+        source.connect(audioContext.destination);
+        source.start();
+      }
 
       function clearScene() {
         // Remove anchored objects
@@ -126,6 +144,9 @@
             const distance = Math.sqrt(dx * dx + dz * dz);
 
             if (distance < THRESHOLD) {
+              // Play confirmation audio
+              playConfirmationSound();
+
               // Remove only the first anchor if too close
               scene.removeNode(anchoredObject);
               anchor.delete();
