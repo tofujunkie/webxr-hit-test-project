@@ -241,61 +241,6 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
-      const SPHERE_MODEL_URL = 'media/gltf/sphere/sphere.gltf';
-      const SPHERE_SEGMENTS = 10; // Number of spheres per line
-      let lineSegments = []; // Array of arrays of sphere nodes
-
-      function updateAnchorLines(frame) {
-        // Remove old line segments from scene
-        for (let segment of lineSegments) {
-          for (let sphere of segment) {
-            scene.removeNode(sphere);
-          }
-        }
-        lineSegments = [];
-
-        if (anchoredObjects.length < 2) return; // Need at least 2 anchors
-
-        for (let i = 0; i < anchoredObjects.length - 1; i++) {
-          const anchorA = anchoredObjects[i].anchor;
-          const anchorB = anchoredObjects[i + 1].anchor;
-
-          if (!frame.trackedAnchors.has(anchorA) || !frame.trackedAnchors.has(anchorB)) continue;
-
-          const poseA = frame.getPose(anchorA.anchorSpace, xrRefSpace);
-          const poseB = frame.getPose(anchorB.anchorSpace, xrRefSpace);
-          if (!poseA || !poseB) continue;
-
-          const pA = poseA.transform.position;
-          const pB = poseB.transform.position;
-
-          // Compute direction vector
-          const dx = pB.x - pA.x;
-          const dy = pB.y - pA.y;
-          const dz = pB.z - pA.z;
-
-          const segment = [];
-
-          for (let j = 0; j <= SPHERE_SEGMENTS; j++) {
-            const t = j / SPHERE_SEGMENTS;
-            const x = pA.x + dx * t;
-            const y = pA.y + dy * t;
-            const z = pA.z + dz * t;
-
-            // Create sphere node
-            const sphere = new Gltf2Node({ url: SPHERE_MODEL_URL });
-            const m = mat4.create();
-            mat4.fromTranslation(m, [x, y, z]);
-            mat4.scale(m, m, [0.5, 0.5, 0.5]); // Make spheres small
-            sphere.matrix = m;
-
-            scene.addNode(sphere);
-            segment.push(sphere);
-          }
-
-          lineSegments.push(segment);
-        }
-      }
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
@@ -362,7 +307,6 @@
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
-          updateAnchorLines(frame);
         }
       
         scene.startFrame();
