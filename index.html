@@ -7,6 +7,7 @@
     <meta name='apple-mobile-web-app-capable' content='yes'>
     <link rel='icon' type='image/png' sizes='32x32' href='favicon-32x32.png'>
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
+    <script src="https://cdn.jsdelivr.net/npm/resonance-audio/build/resonance-audio.min.js"></script>
     <link rel='stylesheet' href='css/common.css'>
 
     <title>Netraudio Technical Demo</title>
@@ -36,6 +37,33 @@
       let xrRefSpace = null;
       let xrViewerSpace = null;
       let xrHitTestSource = null;
+
+      // Audio scene globals
+      const audioContext = new AudioContext();
+      const resonance = new ResonanceAudio(audioContext);
+      resonance.output.connect(audioContext.destination);
+      audioContext.suspend();
+
+      let audioBuffer = null;
+      fetch('media/sound/beep.mp3')
+        .then(r => r.arrayBuffer())
+        .then(ab => audioContext.decodeAudioData(ab))
+        .then(decoded => { audioBuffer = decoded; })
+        .catch(console.error);
+
+      // Create and start a looping bufferSource at position, return the source so we can stop it later.
+      function createAudioSource(position) {
+        if (audioContext.state === 'suspended') audioContext.resume();
+        const source3d = resonance.createSource();
+        source3d.setPosition(position[0], position[1], position[2]);
+
+        const bufferSource = audioContext.createBufferSource();
+        bufferSource.buffer = audioBuffer;
+        bufferSource.loop = true;              // <-- loop continuously
+        bufferSource.connect(source3d.input);
+        bufferSource.start();
+        return bufferSource;
+      }
 
       // WebGL scene globals.
       let gl = null;
