@@ -21,7 +21,7 @@
       import {Node} from './js/render/core/node.js';
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
-      import {vec3} from './js/render/math/gl-matrix.js';
+      import {mat4, vec3} from './js/render/math/gl-matrix.js';
 
       // XR globals
       let xrButton = null;
@@ -30,6 +30,7 @@
       let xrHitTestSource = null;
 
       // Audio scene globals
+      const ANALYSER_FFT_SIZE = 1024;
       const audioContext = new AudioContext();
       const resonance = new ResonanceAudio(audioContext);
       resonance.output.connect(audioContext.destination);
@@ -54,6 +55,66 @@
         bufferSource.connect(source3d.input);
         bufferSource.start();
         return bufferSource; // Important for stopping later
+      }
+
+      function createBufferSource(source, buffer, analyser) {
+        // Create a buffer source. This will need to be recreated every time
+        // we wish to start the audio, see
+        // https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode
+        let bufferSource = audioContext.createBufferSource();
+        bufferSource.loop = true;
+        bufferSource.connect(source.input);
+
+        bufferSource.connect(analyser);
+
+        bufferSource.buffer = buffer;
+
+        return bufferSource;
+      }
+
+      let fftBuffer = new Float32Array(ANALYSER_FFT_SIZE);
+      function getLoudnessScale(analyser) {
+        analyser.getFloatTimeDomainData(fftBuffer);
+        let sum = 0;
+        for (let i = 0; i < fftBuffer.length; ++i)
+          sum += fftBuffer[i] * fftBuffer[i];
+
+        // Calculate RMS and convert it to DB for perceptual loudness.
+        let rms = Math.sqrt(sum / fftBuffer.length);
+        let db = 30 + 10 / Math.LN10 * Math.log(rms <= 0 ? 0.0001 : rms);
+
+        // Moving average with the alpha of 0.525. Experimentally determined.
+        analyser.lastRMSdB += 0.525 * ((db < 0 ? 0 : db) - analyser.lastRMSdB);
+
+        // Scaling by 1/30 is also experimentally determined. Max is to present
+        // objects from disappearing entirely.
+        return Math.max(0.3, analyser.lastRMSdB / 30.0);
+      }
+
+      function updateAudioNodes() {
+        if (!stereo)
+          return;
+
+        for (let source of audioSources) {
+          if (!source.node) {
+            source.node = stereo.clone();
+            source.node.visible = true;
+            source.node.selectable = true;
+            scene.addNode(source.node);
+          }
+
+          let node = source.node;
+          let matrix = node.matrix;
+
+          // Move the node to the right location.
+          mat4.identity(matrix);
+          mat4.translate(matrix, matrix, source.position);
+          mat4.rotateY(matrix, matrix, source.rotateY);
+
+          // Scale it based on loudness of the audio channel
+          let scale = getLoudnessScale(source.analyser);
+          mat4.scale(matrix, matrix, [scale, scale, scale]);
+        }
       }
 
       // WebGL scene globals
