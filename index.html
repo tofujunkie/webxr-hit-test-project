@@ -79,7 +79,7 @@
       }
 
       function updateAudioNodes(frame, viewerPose) {
-        const THRESHOLD = 1; // 100cm
+        const THRESHOLD = 0.6; // 100cm
         const viewerPos = viewerPose.transform.position;
 
         for (let obj of [...anchoredObjects]) { // clone to avoid mutation issues
@@ -294,7 +294,6 @@
           updateAudioNodes(frame, viewerPose);
         }
       
-
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
         scene.drawXRFrame(frame, viewerPose);
