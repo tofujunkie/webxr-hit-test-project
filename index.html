@@ -9,31 +9,10 @@
     <link rel='icon' type='image/png' sizes='96x96' href='favicon-96x96.png'>
     <script src="https://cdn.jsdelivr.net/npm/resonance-audio/build/resonance-audio.min.js"></script>
     <link rel='stylesheet' href='css/common.css'>
-    <style>
-      #clearButton {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 12px 20px;
-        font-size: 16px;
-        font-weight: bold;
-        color: white;
-        background-color: #d32f2f;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        z-index: 999;
-      }
-      #clearButton:hover {
-        background-color: #b71c1c;
-      }
-    </style>
     <title>Netraudio Technical Demo</title>
   </head>
   <body>
     <header></header>
-    <button id="clearButton">Clear Scene</button>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -62,8 +41,6 @@
         .then(ab => audioContext.decodeAudioData(ab))
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
-
-      document.getElementById('clearButton').addEventListener('click', clearScene);
 
       function clearScene() {
         // Remove anchored objects
