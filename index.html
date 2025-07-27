@@ -98,6 +98,7 @@
           anchoredObject.matrix.set(anchorPose.transform.matrix);
 
           const p = anchorPose.transform.position;
+          obj.position = [p.x, p.y, p.z];
           source3d.setPosition(p.x, p.y, p.z);
 
           // Sound logic: only first stereo plays
@@ -274,13 +275,8 @@
         if (anchoredObjects.length < 2) return;
 
         for (let i = 0; i < anchoredObjects.length - 1; i++) {
-          const p1Node = anchoredObjects[i].anchoredObject;
-          const p2Node = anchoredObjects[i + 1].anchoredObject;
-
-          // Extract world positions from the node matrices
-          const p1 = [p1Node.matrix[12], p1Node.matrix[13], p1Node.matrix[14]];
-          const p2 = [p2Node.matrix[12], p2Node.matrix[13], p2Node.matrix[14]];
-
+          const p1 = anchoredObjects[i].position;
+          const p2 = anchoredObjects[i + 1].position;
           createLineBetweenPoints(p1, p2);
         }
       }
@@ -296,7 +292,8 @@
           anchor: anchor,
           audioSource: bufferSource,
           analyser: analyser,
-          source3d: source3d
+          source3d: source3d,
+          position: position.slice()
         });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
