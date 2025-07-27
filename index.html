@@ -43,6 +43,7 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
+      // Create and start audio source with analyser
       function createAudioSource(position) {
         if (audioContext.state === 'suspended') audioContext.resume();
 
@@ -86,23 +87,16 @@
           const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
           if (!anchorPose) continue;
 
-          // Compute updated transform
-          const position = [
-            anchorPose.transform.position.x,
-            anchorPose.transform.position.y,
-            anchorPose.transform.position.z
-          ];
+          // Apply anchor transform first
+          anchoredObject.matrix.set(anchorPose.transform.matrix);
 
-          // Reset matrix and apply transforms
-          let matrix = anchoredObject.matrix;
-          mat4.identity(matrix);
-          mat4.translate(matrix, matrix, position);
-          mat4.rotateY(matrix, matrix, 0); // Optional orientation
+          // Update audio source position
+          const p = anchorPose.transform.position;
+          source3d.setPosition(p.x, p.y, p.z);
+
+          // Apply loudness-based scale on top
           const scale = getLoudnessScale(analyser);
-          mat4.scale(matrix, matrix, [scale, scale, scale]);
-
-          // Update audio position to match anchor
-          source3d.setPosition(position[0], position[1], position[2]);
+          mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
         }
       }
 
