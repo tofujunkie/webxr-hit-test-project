@@ -272,17 +272,6 @@
           }
         }
 
-        if (pose) {
-          const view = pose.views[0];
-          const pos = view.transform.position;
-          const orient = view.transform.orientation;
-
-          // Update ResonanceAudio listener to match XR camera
-          resonance.setListenerPosition(pos.x, pos.y, pos.z);
-          resonance.setListenerOrientation(orient.x, orient.y, orient.z, orient.w);
-        }
-
-
         updateAudioNodes(frame);
 
         scene.startFrame();
