@@ -61,7 +61,7 @@
         bufferSource.connect(analyser);
         bufferSource.start();
 
-        return { bufferSource, analyser };
+        return { bufferSource, analyser, source3d };
       }
 
       let fftBuffer = new Float32Array(ANALYSER_FFT_SIZE);
@@ -80,9 +80,8 @@
 
       function updateAudioNodes(frame) {
         for (let obj of anchoredObjects) {
-          const { anchoredObject, anchor, analyser } = obj;
+          const { anchoredObject, anchor, analyser, source3d } = obj;
 
-          // Skip if anchor not tracked this frame
           if (!frame.trackedAnchors.has(anchor)) continue;
 
           const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
@@ -91,7 +90,11 @@
           // Apply anchor transform first
           anchoredObject.matrix.set(anchorPose.transform.matrix);
 
-          // Apply loudness-based scale on top of anchor transform
+          // Update audio source position
+          const p = anchorPose.transform.position;
+          source3d.setPosition(p.x, p.y, p.z);
+
+          // Apply loudness-based scale on top
           const scale = getLoudnessScale(analyser);
           mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
         }
@@ -172,7 +175,6 @@
       }
 
       function onEndSession(session) {
-        // Stop all audio sources before clearing objects
         anchoredObjects.forEach(obj => {
           if (obj.audioSource) {
             try {
@@ -206,13 +208,14 @@
         let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
         scene.addNode(stereo);
 
-        let { bufferSource, analyser } = createAudioSource(position);
+        let { bufferSource, analyser, source3d } = createAudioSource(position);
 
         anchoredObjects.push({
           anchoredObject: stereo,
           anchor: anchor,
           audioSource: bufferSource,
-          analyser: analyser
+          analyser: analyser,
+          source3d: source3d
         });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
@@ -263,7 +266,6 @@
           }
         }
 
-        // Update anchor-based matrices with loudness scaling
         updateAudioNodes(frame);
 
         scene.startFrame();
