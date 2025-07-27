@@ -125,13 +125,15 @@
               return;
             }
 
-            // Play sound and apply scale for the active stereo
+            // Play sound and apply scale for the active stereo based on getLoudnessScale
             source3d.setGain(1);
             const scale = getLoudnessScale(analyser);
             mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
           } else {
-            // Mute all other stereos
+            // Mute all other stereos and apply fixed scale
             source3d.setGain(0);
+            const scale = 0.3;
+            mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
           }
         }
       }
