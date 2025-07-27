@@ -124,7 +124,7 @@
       }
 
       function updateAudioNodes(frame, viewerPose) {
-        const THRESHOLD = 0.6; // 60 cm
+        const THRESHOLD = 0.3; // 30 cm
         const viewerPos = viewerPose.transform.position;
 
         // Determine the first active anchor (only this one plays/removes)
