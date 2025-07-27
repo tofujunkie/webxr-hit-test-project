@@ -143,8 +143,6 @@
           }
         });
 
-        audioContext.suspend();
-
         anchoredObjects = [];
 
         if (xrHitTestSource) {
@@ -157,10 +155,12 @@
 
       function onSessionEnded(event) {
         xrButton.setSession(null);
+        audioContext.suspend();
       }
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
+      let lines = [];
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
@@ -183,7 +183,7 @@
 
           if (objectToRemove.audioSource) {
             try {
-              objectToRemove.audioSource.stop();
+              objectToRemove.audioSource.stop(0);
               objectToRemove.audioSource.disconnect();
             } catch (e) {
               console.warn('Audio source already stopped:', e);
