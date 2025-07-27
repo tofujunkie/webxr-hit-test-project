@@ -78,16 +78,22 @@
         return Math.max(0.3, analyser.lastRMSdB / 30.0);
       }
 
-      function updateAudioNodes() {
+      function updateAudioNodes(frame) {
         for (let obj of anchoredObjects) {
-          let node = obj.anchoredObject;
-          let matrix = node.matrix;
+          const { anchoredObject, anchor, analyser } = obj;
 
-          mat4.identity(matrix);
-          mat4.translate(matrix, matrix, obj.position);
+          // Skip if anchor not tracked this frame
+          if (!frame.trackedAnchors.has(anchor)) continue;
 
-          let scale = getLoudnessScale(obj.analyser);
-          mat4.scale(matrix, matrix, [scale, scale, scale]);
+          const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
+          if (!anchorPose) continue;
+
+          // Apply anchor transform first
+          anchoredObject.matrix.set(anchorPose.transform.matrix);
+
+          // Apply loudness-based scale on top of anchor transform
+          const scale = getLoudnessScale(analyser);
+          mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
         }
       }
 
@@ -206,8 +212,7 @@
           anchoredObject: stereo,
           anchor: anchor,
           audioSource: bufferSource,
-          analyser: analyser,
-          position: position
+          analyser: analyser
         });
 
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
@@ -258,14 +263,8 @@
           }
         }
 
-        for (const { anchoredObject, anchor } of anchoredObjects) {
-          if (!frame.trackedAnchors.has(anchor)) continue;
-          const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
-          anchoredObject.matrix = anchorPose.transform.matrix;
-        }
-
-        // Update loudness scaling
-        updateAudioNodes();
+        // Update anchor-based matrices with loudness scaling
+        updateAudioNodes(frame);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
