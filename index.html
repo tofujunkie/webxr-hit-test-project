@@ -106,10 +106,10 @@
 
           if (distance < THRESHOLD) {
             anchoredObject.visible = false;
-            source3d.gain = 0;
+            source3d.setGain(0);
           } else {
             anchoredObject.visible = true;
-            source3d.gain = 1;
+            source3d.setGain(1);
           }
 
           // Apply loudness-based scale on top
