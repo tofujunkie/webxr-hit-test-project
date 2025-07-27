@@ -266,6 +266,10 @@
           }
         }
 
+        if (pose) {
+          resonance.setListenerFromMatrix({elements: pose.transform.matrix});
+        }
+
         updateAudioNodes(frame);
 
         scene.startFrame();
