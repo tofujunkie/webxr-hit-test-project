@@ -240,7 +240,44 @@
       }
 
       const MAX_ANCHORED_OBJECTS = 4;
-      let anchoredObjects = [];
+      let anchoredObjects = []; // {anchoredObject, anchor, audioSource, analyser, source3d}
+      let lineObjects = []; // { node, anchorA, anchorB }
+
+      function createLineNode() {
+        const node = new Node();
+        node.updateEndpoints = function(start, end) {
+          this.start = start;
+          this.end = end;
+        };
+        node.onRender = function() {
+          if (!this.start || !this.end) return;
+
+          const positions = new Float32Array([
+            this.start.x, this.start.y, this.start.z,
+            this.end.x, this.end.y, this.end.z
+          ]);
+
+          const buffer = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+          gl.drawArrays(gl.LINES, 0, 2);
+        };
+        return node;
+      }
+
+      function updateLines(frame) {
+        for (let line of lineObjects) {
+          const poseA = frame.getPose(line.anchorA.anchorSpace, xrRefSpace);
+          const poseB = frame.getPose(line.anchorB.anchorSpace, xrRefSpace);
+
+          if (poseA && poseB) {
+            line.node.updateEndpoints(poseA.transform.position, poseB.transform.position);
+          }
+        }
+      }
 
       function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
@@ -256,6 +293,15 @@
           source3d: source3d
         });
 
+        // If there is a previous anchor, create a line node
+        if (anchoredObjects.length > 1) {
+          let prevAnchor = anchoredObjects[anchoredObjects.length - 2].anchor;
+          let lineNode = createLineNode();
+          scene.addNode(lineNode);
+          lineObjects.push({ node: lineNode, anchorA: prevAnchor, anchorB: anchor });
+        }
+
+        // Remove old objects if over max
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           let objectToRemove = anchoredObjects.shift();
           scene.removeNode(objectToRemove.anchoredObject);
@@ -269,6 +315,15 @@
               console.warn('Audio source already stopped:', e);
             }
           }
+
+          // Remove any line connected to this anchor
+          lineObjects = lineObjects.filter(line => {
+            if (line.anchorA === objectToRemove.anchor || line.anchorB === objectToRemove.anchor) {
+              scene.removeNode(line.node);
+              return false;
+            }
+            return true;
+          });
         }
       }
 
@@ -308,6 +363,8 @@
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
         }
+
+        updateLines(frame);
       
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
