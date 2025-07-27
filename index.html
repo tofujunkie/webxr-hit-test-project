@@ -29,7 +29,7 @@
       let xrViewerSpace = null;
       let xrHitTestSource = null;
 
-      // Audio scene globals
+      // Audio globals
       const ANALYSER_FFT_SIZE = 1024;
       const audioContext = new AudioContext();
       const resonance = new ResonanceAudio(audioContext);
@@ -43,76 +43,50 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
-      // Create and start a looping bufferSource at position, return the source so we can stop it later
+      // Create and start audio source with analyser
       function createAudioSource(position) {
         if (audioContext.state === 'suspended') audioContext.resume();
+
         const source3d = resonance.createSource();
         source3d.setPosition(position[0], position[1], position[2]);
+
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = ANALYSER_FFT_SIZE;
+        analyser.lastRMSdB = 0;
 
         const bufferSource = audioContext.createBufferSource();
         bufferSource.buffer = audioBuffer;
         bufferSource.loop = true;
         bufferSource.connect(source3d.input);
-        bufferSource.start();
-        return bufferSource; // Important for stopping later
-      }
-
-      function createBufferSource(source, buffer, analyser) {
-        // Create a buffer source. This will need to be recreated every time
-        // we wish to start the audio, see
-        // https://developer.mozilla.org/en-US/docs/Web/API/AudioBufferSourceNode
-        let bufferSource = audioContext.createBufferSource();
-        bufferSource.loop = true;
-        bufferSource.connect(source.input);
-
         bufferSource.connect(analyser);
+        bufferSource.start();
 
-        bufferSource.buffer = buffer;
-
-        return bufferSource;
+        return { bufferSource, analyser };
       }
 
       let fftBuffer = new Float32Array(ANALYSER_FFT_SIZE);
       function getLoudnessScale(analyser) {
         analyser.getFloatTimeDomainData(fftBuffer);
         let sum = 0;
-        for (let i = 0; i < fftBuffer.length; ++i)
-          sum += fftBuffer[i] * fftBuffer[i];
+        for (let i = 0; i < fftBuffer.length; ++i) sum += fftBuffer[i] * fftBuffer[i];
 
-        // Calculate RMS and convert it to DB for perceptual loudness.
         let rms = Math.sqrt(sum / fftBuffer.length);
         let db = 30 + 10 / Math.LN10 * Math.log(rms <= 0 ? 0.0001 : rms);
 
-        // Moving average with the alpha of 0.525. Experimentally determined.
         analyser.lastRMSdB += 0.525 * ((db < 0 ? 0 : db) - analyser.lastRMSdB);
 
-        // Scaling by 1/30 is also experimentally determined. Max is to present
-        // objects from disappearing entirely.
         return Math.max(0.3, analyser.lastRMSdB / 30.0);
       }
 
       function updateAudioNodes() {
-        if (!stereo)
-          return;
-
-        for (let source of audioSources) {
-          if (!source.node) {
-            source.node = stereo.clone();
-            source.node.visible = true;
-            source.node.selectable = true;
-            scene.addNode(source.node);
-          }
-
-          let node = source.node;
+        for (let obj of anchoredObjects) {
+          let node = obj.anchoredObject;
           let matrix = node.matrix;
 
-          // Move the node to the right location.
           mat4.identity(matrix);
-          mat4.translate(matrix, matrix, source.position);
-          mat4.rotateY(matrix, matrix, source.rotateY);
+          mat4.translate(matrix, matrix, obj.position);
 
-          // Scale it based on loudness of the audio channel
-          let scale = getLoudnessScale(source.analyser);
+          let scale = getLoudnessScale(obj.analyser);
           mat4.scale(matrix, matrix, [scale, scale, scale]);
         }
       }
@@ -196,7 +170,7 @@
         anchoredObjects.forEach(obj => {
           if (obj.audioSource) {
             try {
-              obj.audioSource.stop(0);
+              obj.audioSource.stop();
               obj.audioSource.disconnect();
             } catch (e) {
               console.warn('Audio already stopped:', e);
@@ -221,22 +195,21 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
-      let lines = [];
 
       function addAnchoredObjectsToScene(anchor, position) {
-        let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
+        let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
         scene.addNode(stereo);
 
-        // Create audio at the same position
-        let bufferSource = createAudioSource(position);
+        let { bufferSource, analyser } = createAudioSource(position);
 
         anchoredObjects.push({
           anchoredObject: stereo,
           anchor: anchor,
-          audioSource: bufferSource
+          audioSource: bufferSource,
+          analyser: analyser,
+          position: position
         });
 
-        // Remove oldest if over limit
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           let objectToRemove = anchoredObjects.shift();
           scene.removeNode(objectToRemove.anchoredObject);
@@ -244,7 +217,7 @@
 
           if (objectToRemove.audioSource) {
             try {
-              objectToRemove.audioSource.stop(0);
+              objectToRemove.audioSource.stop();
               objectToRemove.audioSource.disconnect();
             } catch (e) {
               console.warn('Audio source already stopped:', e);
@@ -262,7 +235,6 @@
               pose.transform.position.y,
               pose.transform.position.z
             ];
-
             addAnchoredObjectsToScene(anchor, position);
           }, (error) => {
             console.error("Could not create anchor: " + error);
@@ -286,11 +258,14 @@
           }
         }
 
-        for (const {anchoredObject, anchor} of anchoredObjects) {
+        for (const { anchoredObject, anchor } of anchoredObjects) {
           if (!frame.trackedAnchors.has(anchor)) continue;
           const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
           anchoredObject.matrix = anchorPose.transform.matrix;
         }
+
+        // Update loudness scaling
+        updateAudioNodes();
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
