@@ -286,7 +286,7 @@
           resonance.setListenerFromMatrix({elements: pose.transform.matrix});
         }
 
-        updateAudioNodes(frame);
+        updateAudioNodes(frame, pose);
 
         scene.startFrame();
         session.requestAnimationFrame(onXRFrame);
