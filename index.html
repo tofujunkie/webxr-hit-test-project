@@ -331,16 +331,60 @@
         updateLines();
       }
 
+      function hasAnyAnchoredObject(cameraPos, reticlePos) {
+        const MIN_DISTANCE = 0.15; // 15 cm near reticle
+        const LINE_TOLERANCE = 0.1; // 10 cm tolerance
+        const cameraToReticle = vec3.create();
+        vec3.sub(cameraToReticle, reticlePos, cameraPos);
+        const lineLength = vec3.length(cameraToReticle);
+
+        for (let obj of anchoredObjects) {
+          const objPos = obj.position;
+
+          // Check near reticle
+          const distToReticle = vec3.distance(objPos, reticlePos);
+          if (distToReticle < MIN_DISTANCE) return true;
+
+          // Check along line between camera and reticle
+          const cameraToObj = vec3.create();
+          vec3.sub(cameraToObj, objPos, cameraPos);
+          const proj = vec3.dot(cameraToObj, cameraToReticle) / (lineLength * lineLength);
+
+          if (proj > 0 && proj < 1) { // Within segment
+            const closestPoint = vec3.create();
+            vec3.scaleAndAdd(closestPoint, cameraPos, cameraToReticle, proj);
+            const distToLine = vec3.distance(objPos, closestPoint);
+            if (distToLine < LINE_TOLERANCE) return true;
+          }
+        }
+
+        return false;
+      }
+
       function onSelect(event) {
         if (reticle.visible) {
+          const pose = reticleHitTestResult.getPose(xrRefSpace);
+
+          const reticlePos = [
+            pose.transform.position.x,
+            pose.transform.position.y,
+            pose.transform.position.z
+          ];
+
+          const frame = event.frame;
+          const viewerPose = frame.getViewerPose(xrRefSpace);
+          if (!viewerPose) return;
+
+          const cameraPos = [
+            viewerPose.transform.position.x,
+            viewerPose.transform.position.y,
+            viewerPose.transform.position.z
+          ];
+
+          if (hasAnyAnchoredObject(cameraPos, reticlePos)) return;
+
           reticleHitTestResult.createAnchor().then((anchor) => {
-            const pose = reticleHitTestResult.getPose(xrRefSpace);
-            const position = [
-              pose.transform.position.x,
-              pose.transform.position.y,
-              pose.transform.position.z
-            ];
-            addAnchoredObjectsToScene(anchor, position);
+            addAnchoredObjectsToScene(anchor, reticlePos);
           }, (error) => {
             console.error("Could not create anchor: " + error);
           });
