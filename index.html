@@ -121,6 +121,8 @@
 
               anchoredObjects = anchoredObjects.filter(o => o.anchor !== anchor);
 
+              updateLines();
+
               // Exit after removal so we don't modify while iterating
               return;
             }
@@ -241,56 +243,50 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
-      let connectionSpheres = []; // Holds arrays of spheres for each pair
+      let lineSpheres = [];
 
-      function updateAnchorConnections() {
-        // Remove old spheres from scene
-        for (let chain of connectionSpheres) {
-          for (let sphereNode of chain) {
-            scene.removeNode(sphereNode);
-          }
+      function clearLineSpheres() {
+        for (let sphere of lineSpheres) {
+          scene.removeNode(sphere);
         }
-        connectionSpheres = [];
+        lineSpheres = [];
+      }
 
-        if (anchoredObjects.length < 2) return; // Need at least 2 anchors
+      function createLineBetweenPoints(p1, p2, segments = 10) {
+        for (let i = 1; i < segments; i++) {
+          let t = i / segments;
+          let x = p1[0] + t * (p2[0] - p1[0]);
+          let y = p1[1] + t * (p2[1] - p1[1]);
+          let z = p1[2] + t * (p2[2] - p1[2]);
 
-        for (let i = 0; i < anchoredObjects.length - 1; i++) {
-          const startObj = anchoredObjects[i].anchoredObject;
-          const endObj = anchoredObjects[i + 1].anchoredObject;
-
-          // Get positions from the anchoredObject matrices
-          let startPos = [startObj.matrix[12], startObj.matrix[13], startObj.matrix[14]];
-          let endPos = [endObj.matrix[12], endObj.matrix[13], endObj.matrix[14]];
-
-          // Number of spheres to create between anchors
-          const numSpheres = 10; 
-          const chain = [];
-
-          for (let j = 1; j <= numSpheres; j++) {
-            const t = j / (numSpheres + 1);
-            const pos = [
-              startPos[0] + (endPos[0] - startPos[0]) * t,
-              startPos[1] + (endPos[1] - startPos[1]) * t,
-              startPos[2] + (endPos[2] - startPos[2]) * t,
-            ];
-
-            // Create sphere node and position it
-            const sphere = new Gltf2Node({ url: 'media/gltf/sphere/sphere.gltf' });
-            mat4.fromTranslation(sphere.matrix, pos);
-            const scale = 0.1; // Small spheres
-            mat4.scale(sphere.matrix, sphere.matrix, [scale, scale, scale]);
-
-            scene.addNode(sphere);
-            chain.push(sphere);
-          }
-
-          connectionSpheres.push(chain);
+          let sphere = new Gltf2Node({ url: 'media/gltf/sphere/sphere.gltf' });
+          mat4.fromTranslation(sphere.matrix, [x, y, z]);
+          let scale = 0.02; // small spheres
+          mat4.scale(sphere.matrix, sphere.matrix, [scale, scale, scale]);
+          scene.addNode(sphere);
+          lineSpheres.push(sphere);
         }
       }
 
+      function updateLines() {
+        clearLineSpheres();
+
+        if (anchoredObjects.length < 2) return;
+
+        for (let i = 0; i < anchoredObjects.length - 1; i++) {
+          const p1Node = anchoredObjects[i].anchoredObject;
+          const p2Node = anchoredObjects[i + 1].anchoredObject;
+
+          // Extract world positions from the node matrices
+          const p1 = [p1Node.matrix[12], p1Node.matrix[13], p1Node.matrix[14]];
+          const p2 = [p2Node.matrix[12], p2Node.matrix[13], p2Node.matrix[14]];
+
+          createLineBetweenPoints(p1, p2);
+        }
+      }
 
       function addAnchoredObjectsToScene(anchor, position) {
-        let stereo = new Gltf2Node({ url: 'media/gltf/sphere/sphere.gltf' });
+        let stereo = new Gltf2Node({ url: 'media/gltf/stereo/stereo.gltf' });
         scene.addNode(stereo);
 
         let { bufferSource, analyser, source3d } = createAudioSource(position);
@@ -317,6 +313,8 @@
             }
           }
         }
+
+        updateLines();
       }
 
       function onSelect(event) {
@@ -354,7 +352,6 @@
         if (viewerPose) {
           resonance.setListenerFromMatrix({elements: viewerPose.transform.matrix});
           updateAudioNodes(frame, viewerPose);
-          updateAnchorConnections();
         }
       
         scene.startFrame();
