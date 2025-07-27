@@ -82,8 +82,10 @@
         const THRESHOLD = 0.6; // 60 cm
         const viewerPos = viewerPose.transform.position;
 
-        // Ensure only first stereo emits sound
+        // Determine the first active anchor (only this one plays/removes)
         let firstActiveAnchor = anchoredObjects.length > 0 ? anchoredObjects[0].anchor : null;
+
+        if (!firstActiveAnchor) return;
 
         for (let obj of [...anchoredObjects]) {
           const { anchoredObject, anchor, analyser, source3d, audioSource: bufferSource } = obj;
@@ -98,47 +100,41 @@
           const p = anchorPose.transform.position;
           source3d.setPosition(p.x, p.y, p.z);
 
-          const dx = p.x - viewerPos.x;
-          const dy = p.y - viewerPos.y;
-          const dz = p.z - viewerPos.z;
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-          if (distance < THRESHOLD) {
-            // Remove if too close
-            scene.removeNode(anchoredObject);
-            anchor.delete();
-
-            try {
-              bufferSource.stop();
-              bufferSource.disconnect();
-            } catch (e) {
-              console.warn('Audio source already stopped:', e);
-            }
-
-            anchoredObjects = anchoredObjects.filter(o => o.anchor !== anchor);
-
-            // Update first active stereo after removal
-            firstActiveAnchor = anchoredObjects.length > 0 ? anchoredObjects[0].anchor : null;
-
-            continue;
-          }
-
           // Sound logic: only first stereo plays
           if (anchor === firstActiveAnchor) {
-            source3d.setGain(1); // Play sound
-          } else {
-            source3d.setGain(0); // Mute others
-          }
+            const dx = p.x - viewerPos.x;
+            const dy = p.y - viewerPos.y;
+            const dz = p.z - viewerPos.z;
+            const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-          // Apply loudness-based scaling only for the active stereo
-          if (anchor === firstActiveAnchor) {
+            if (distance < THRESHOLD) {
+              // Remove only the first anchor if too close
+              scene.removeNode(anchoredObject);
+              anchor.delete();
+
+              try {
+                bufferSource.stop();
+                bufferSource.disconnect();
+              } catch (e) {
+                console.warn('Audio source already stopped:', e);
+              }
+
+              anchoredObjects = anchoredObjects.filter(o => o.anchor !== anchor);
+
+              // Exit after removal so we don't modify while iterating
+              return;
+            }
+
+            // Play sound and apply scale for the active stereo
+            source3d.setGain(1);
             const scale = getLoudnessScale(analyser);
             mat4.scale(anchoredObject.matrix, anchoredObject.matrix, [scale, scale, scale]);
+          } else {
+            // Mute all other stereos
+            source3d.setGain(0);
           }
         }
       }
-
-
 
       // WebGL scene globals
       let gl = null;
