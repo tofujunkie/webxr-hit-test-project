@@ -13,15 +13,7 @@
     <title>Netraudio Technical Demo</title>
   </head>
   <body>
-    <header>
-      <!-- <details open>
-        <summary>Hit Test with Anchors</summary>
-        <p>
-          This sample demonstrates using hit testing to find intersections on real-world surfaces and then using Anchors to attach a virtual object to that location.
-          <a class="back" href="./">Back</a>
-        </p>
-      </details> -->
-    </header>
+    <header></header>
     <script type="module">
       import {WebXRButton} from './js/util/webxr-button.js';
       import {Scene} from './js/render/scenes/scene.js';
@@ -30,9 +22,8 @@
       import {Gltf2Node} from './js/render/nodes/gltf2.js';
       import {DropShadowNode} from './js/render/nodes/drop-shadow.js';
       import {vec3} from './js/render/math/gl-matrix.js';
-      import {Ray} from './js/render/math/ray.js';
 
-      // XR globals.
+      // XR globals
       let xrButton = null;
       let xrRefSpace = null;
       let xrViewerSpace = null;
@@ -51,7 +42,7 @@
         .then(decoded => { audioBuffer = decoded; })
         .catch(console.error);
 
-      // Create and start a looping bufferSource at position, return the source so we can stop it later.
+      // Create and start a looping bufferSource at position, return the source so we can stop it later
       function createAudioSource(position) {
         if (audioContext.state === 'suspended') audioContext.resume();
         const source3d = resonance.createSource();
@@ -59,13 +50,13 @@
 
         const bufferSource = audioContext.createBufferSource();
         bufferSource.buffer = audioBuffer;
-        bufferSource.loop = true;              // <-- loop continuously
+        bufferSource.loop = true;
         bufferSource.connect(source3d.input);
         bufferSource.start();
-        return bufferSource;
+        return bufferSource; // Important for stopping later
       }
 
-      // WebGL scene globals.
+      // WebGL scene globals
       let gl = null;
       let renderer = null;
       let scene = new Scene();
@@ -83,14 +74,12 @@
       scene.addNode(reticle);
       let reticleHitTestResult = null;
 
-      // Having a really simple drop shadow underneath an object helps ground
-      // it in the world without adding much complexity.
+      // Drop shadow
       let shadow = new DropShadowNode();
       vec3.set(shadow.scale, 0.15, 0.15, 0.15);
       arObject.addNode(shadow);
 
-      // Ensure the background is transparent for AR.
-      scene.clear = false;
+      scene.clear = false; // Transparent background for AR
 
       function initXR() {
         xrButton = new WebXRButton({
@@ -104,9 +93,7 @@
 
         if (navigator.xr) {
           navigator.xr.isSessionSupported('immersive-ar')
-                      .then((supported) => {
-            xrButton.enabled = supported;
-          });
+                      .then((supported) => { xrButton.enabled = supported; });
         }
       }
 
@@ -123,21 +110,13 @@
         session.addEventListener('select', onSelect);
 
         if (!gl) {
-          gl = createWebGLContext({
-            xrCompatible: true
-          });
-
+          gl = createWebGLContext({ xrCompatible: true });
           renderer = new Renderer(gl);
-
           scene.setRenderer(renderer);
         }
 
         session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
 
-        // In this sample we want to cast a ray straight out from the viewer's
-        // position and render a reticle where it intersects with a real world
-        // surface. To do this we first get the viewer space, then create a
-        // hitTestSource that tracks it.
         session.requestReferenceSpace('viewer').then((refSpace) => {
           xrViewerSpace = refSpace;
           session.requestHitTestSource({ space: xrViewerSpace }).then((hitTestSource) => {
@@ -147,15 +126,30 @@
 
         session.requestReferenceSpace('local').then((refSpace) => {
           xrRefSpace = refSpace;
-
           session.requestAnimationFrame(onXRFrame);
         });
       }
 
       function onEndSession(session) {
-        anchoredObjects.clear();
-        xrHitTestSource.cancel();
-        xrHitTestSource = null;
+        // Stop all audio sources before clearing objects
+        anchoredObjects.forEach(obj => {
+          if (obj.audioSource) {
+            try {
+              obj.audioSource.stop();
+              obj.audioSource.disconnect();
+            } catch (e) {
+              console.warn('Audio already stopped:', e);
+            }
+          }
+        });
+
+        anchoredObjects = [];
+
+        if (xrHitTestSource) {
+          xrHitTestSource.cancel();
+          xrHitTestSource = null;
+        }
+
         session.end();
       }
 
@@ -165,46 +159,60 @@
 
       const MAX_ANCHORED_OBJECTS = 4;
       let anchoredObjects = [];
-      function addAnchoredObjectsToScene(anchor) {
+
+      function addAnchoredObjectsToScene(anchor, position) {
         let stereo = new Gltf2Node({url: 'media/gltf/stereo/stereo.gltf'});
         scene.addNode(stereo);
+
+        // Create audio at the same position
+        let bufferSource = createAudioSource(position);
+
         anchoredObjects.push({
           anchoredObject: stereo,
-          anchor: anchor
+          anchor: anchor,
+          audioSource: bufferSource
         });
 
-        // For performance reasons if we add too many objects start
-        // removing the oldest ones to keep the scene complexity
-        // from growing too much.
+        // Remove oldest if over limit
         if (anchoredObjects.length > MAX_ANCHORED_OBJECTS) {
           let objectToRemove = anchoredObjects.shift();
           scene.removeNode(objectToRemove.anchoredObject);
           objectToRemove.anchor.delete();
+
+          if (objectToRemove.audioSource) {
+            try {
+              objectToRemove.audioSource.stop();
+              objectToRemove.audioSource.disconnect();
+            } catch (e) {
+              console.warn('Audio source already stopped:', e);
+            }
+          }
         }
       }
 
-      let rayOrigin = vec3.create();
-      let rayDirection = vec3.create();
       function onSelect(event) {
         if (reticle.visible) {
-          // Create an anchor.
           reticleHitTestResult.createAnchor().then((anchor) => {
-            addAnchoredObjectsToScene(anchor);
+            const pose = reticleHitTestResult.getPose(xrRefSpace);
+            const position = [
+              pose.transform.position.x,
+              pose.transform.position.y,
+              pose.transform.position.z
+            ];
+
+            addAnchoredObjectsToScene(anchor, position);
           }, (error) => {
             console.error("Could not create anchor: " + error);
           });
         }
       }
 
-      // Called every time a XRSession requests that a new frame be drawn.
       function onXRFrame(t, frame) {
         let session = frame.session;
         let pose = frame.getViewerPose(xrRefSpace);
 
         reticle.visible = false;
 
-        // If we have a hit test source, get its results for the frame
-        // and use the pose to display a reticle in the scene.
         if (xrHitTestSource && pose) {
           let hitTestResults = frame.getHitTestResults(xrHitTestSource);
           if (hitTestResults.length > 0) {
@@ -216,25 +224,17 @@
         }
 
         for (const {anchoredObject, anchor} of anchoredObjects) {
-          // only update the object's position if it's still in the list
-          // of frame.trackedAnchors
-          if (!frame.trackedAnchors.has(anchor)) {
-            continue;
-          }
+          if (!frame.trackedAnchors.has(anchor)) continue;
           const anchorPose = frame.getPose(anchor.anchorSpace, xrRefSpace);
           anchoredObject.matrix = anchorPose.transform.matrix;
         }
 
         scene.startFrame();
-
         session.requestAnimationFrame(onXRFrame);
-
         scene.drawXRFrame(frame, pose);
-
         scene.endFrame();
       }
 
-      // Start the XR application.
       initXR();
     </script>
   </body>
